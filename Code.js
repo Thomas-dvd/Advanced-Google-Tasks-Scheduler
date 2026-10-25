@@ -54,24 +54,42 @@ function processRule(rule, today) {
   }
 
   const tasklistId = getOrCreateTaskList(rule.tasklistName || "@default");
+  const taskId = generateTaskId(rule, dueDate);
 
-  // Prevent duplicate tasks for the same due date
-  if (taskAlreadyExists(tasklistId, rule.title, dueDate)) {
-    Logger.log(`[SKIP] "${rule.title}": already exists for ${formatDate(dueDate)}`);
+  // Prevent duplicate tasks using unique ID tag
+  if (taskAlreadyExists(tasklistId, taskId)) {
+    Logger.log(`[SKIP] "${rule.title}": already exists (${taskId})`);
     return "skipped";
   }
 
   Tasks.Tasks.insert(
     {
       title: rule.title,
-      notes: rule.notes || "",
+      notes: buildTaskNotes(rule.notes, taskId),
       due: dueDate.toISOString(),
     },
     tasklistId
   );
 
-  Logger.log(`[OK] Created "${rule.title}" (due ${formatDate(dueDate)})`);
+  Logger.log(`[OK] Created "${rule.title}" (due ${formatDate(dueDate)}, ID: ${taskId})`);
   return "created";
+}
+
+function generateTaskId(rule, dueDate) {
+  const yyyy = dueDate.getUTCFullYear();
+  const mm = String(dueDate.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(dueDate.getUTCDate()).padStart(2, "0");
+  const hh = String(dueDate.getUTCHours()).padStart(2, "0");
+  const min = String(dueDate.getUTCMinutes()).padStart(2, "0");
+  const row = String(rule.rowIndex || 0).padStart(3, "0");
+
+  return `RTid${yyyy}${mm}${dd}${hh}${min}${row}`;
+}
+
+function buildTaskNotes(userNotes, taskId) {
+  const clean = (userNotes || "").trim();
+  const tag = `[${taskId}]`;
+  return clean ? `${clean}\n\n${tag}` : tag;
 }
 
 function getNextOccurrence(rule, today) {
@@ -127,17 +145,20 @@ function getOrCreateTaskList(name) {
   return created.id;
 }
 
-function taskAlreadyExists(tasklistId, title, dueDate) {
-  const dueDateStr = dueDate.toISOString().split("T")[0];
+function taskAlreadyExists(tasklistId, taskId) {
   let pageToken = null;
 
   do {
-    const params = { maxResults: 100, showCompleted: false, showHidden: false };
+    const params = {
+      maxResults: 100,
+      showCompleted: true,
+      showHidden: true,
+    };
     if (pageToken) params.pageToken = pageToken;
 
     const res = Tasks.Tasks.list(tasklistId, params);
     for (const task of res.items || []) {
-      if (task.title === title && (task.due || "").split("T")[0] === dueDateStr) {
+      if ((task.notes || "").includes(taskId)) {
         return true;
       }
     }
@@ -165,6 +186,7 @@ function loadRulesFromSheet() {
       rule[h] = data[i][j];
     });
 
+    rule.rowIndex = i + 1; // Row number in Google Sheet (1-based)
     rule.enabled = String(rule.enabled).toLowerCase() === "true" || rule.enabled === true;
     rule.title = String(rule.title || "").trim();
     rule.tasklistName = String(rule.tasklistName || "@default").trim();
