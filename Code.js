@@ -426,6 +426,7 @@ function parseEventTriggerConfig(paramStr) {
     calendar: null,
     offset: 0,
     longshot: 60,
+    self: true,
   };
 
   const regex = /(?:^|;)\s*([A-Za-z0-9_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^;]*))/g;
@@ -449,6 +450,9 @@ function parseEventTriggerConfig(paramStr) {
     } else if (key === "LONGSHOT") {
       const n = parseInt(val, 10);
       config.longshot = isNaN(n) || n <= 0 ? 60 : n;
+    } else if (key === "SELF") {
+      const lower = val.toLowerCase();
+      config.self = !(lower === "false" || lower === "0" || lower === "no");
     }
   }
 
@@ -589,8 +593,33 @@ function getEventTriggeredAppearDate(config, dueDate) {
     return a.date.getTime() - b.date.getTime();
   });
 
-  const closest = matchingEvents[0];
-  const appearDate = new Date(closest.date);
+  let selected = matchingEvents[0];
+
+  if (config.self === false) {
+    const targetTitle = String(selected.event.getTitle() || "").toLowerCase().trim();
+    const targetTime = typeof selected.event.getStartTime === "function"
+      ? selected.event.getStartTime().getTime()
+      : selected.date.getTime();
+
+    const previousEvents = matchingEvents.filter(m => {
+      const mTitle = String(m.event.getTitle() || "").toLowerCase().trim();
+      const mTime = typeof m.event.getStartTime === "function"
+        ? m.event.getStartTime().getTime()
+        : m.date.getTime();
+      return mTitle === targetTitle && mTime < targetTime;
+    });
+
+    if (previousEvents.length > 0) {
+      previousEvents.sort((a, b) => {
+        const timeA = typeof a.event.getStartTime === "function" ? a.event.getStartTime().getTime() : a.date.getTime();
+        const timeB = typeof b.event.getStartTime === "function" ? b.event.getStartTime().getTime() : b.date.getTime();
+        return timeB - timeA;
+      });
+      selected = previousEvents[0];
+    }
+  }
+
+  const appearDate = new Date(selected.date);
   appearDate.setUTCDate(appearDate.getUTCDate() + (config.offset || 0));
   return appearDate;
 }

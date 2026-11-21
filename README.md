@@ -175,10 +175,12 @@ Controls the exact calendar anchor for the task to appear:
 
 ### 3. `advance = "event_triggered"`
 * **Description**: Makes a task appear relative to a Google Calendar event.
-* **`parameter_2`**: Event filter string (same syntax as above: `TITLE="..."`, `DESC="..."`, `CALENDAR="..."`, `OFFSET=...`, `LONGSHOT=...`).
-* **Closest Event Matching**: Looks for the matching event **closest** to the task's due date and applies `OFFSET`.
-* **Example**:
-  * `TITLE="Chinese class";OFFSET=1` &rarr; The task appears the day following your Chinese class (e.g. to review lesson material before the next deadline).
+* **`parameter_2`**: Event filter string (same syntax as above: `TITLE="..."`, `DESC="..."`, `CALENDAR="..."`, `OFFSET=...`, `LONGSHOT=...`, `SELF=...`):
+  * `SELF=True/False`: (Default `True`). When set to `False`, instead of anchoring to the target event itself, it anchors to the **previous event with the exact same name** occurring before the target event.
+* **Closest Event Matching**: Looks for the matching event **closest** to the task's due date (or preceding it when `SELF=False`) and applies `OFFSET`.
+* **Examples**:
+  * `TITLE="Chinese class";OFFSET=1` &rarr; The task appears the day following your Chinese class (e.g. to review lesson material after class).
+  * `TITLE="Chinese class";SELF=False;OFFSET=1` &rarr; The preparation task appears the day after your **previous** Chinese class to prepare ahead for the upcoming session.
 
 ---
 
