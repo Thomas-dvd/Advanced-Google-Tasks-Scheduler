@@ -459,22 +459,61 @@ function parseEventTriggerConfig(paramStr) {
   return foundAny ? config : null;
 }
 
-function getGoogleCalendar(calendarNameOrId) {
+function getTargetCalendars(calendarNameOrId) {
   if (typeof CalendarApp === "undefined") {
-    return null;
+    return [];
   }
-  if (!calendarNameOrId || calendarNameOrId === "@default" || calendarNameOrId === "primary") {
-    return CalendarApp.getDefaultCalendar();
+  if (!calendarNameOrId || calendarNameOrId === "@all") {
+    try {
+      const all = CalendarApp.getAllCalendars();
+      if (all && all.length > 0) return all;
+    } catch (e) {
+      // Fallback to default calendar
+    }
+    const def = CalendarApp.getDefaultCalendar();
+    return def ? [def] : [];
+  }
+  if (calendarNameOrId === "@default" || calendarNameOrId.toLowerCase() === "primary") {
+    const def = CalendarApp.getDefaultCalendar();
+    return def ? [def] : [];
   }
   const byName = CalendarApp.getCalendarsByName(calendarNameOrId);
   if (byName && byName.length > 0) {
-    return byName[0];
+    return [byName[0]];
   }
   try {
-    return CalendarApp.getCalendarById(calendarNameOrId);
+    const byId = CalendarApp.getCalendarById(calendarNameOrId);
+    return byId ? [byId] : [];
   } catch (e) {
-    return null;
+    return [];
   }
+}
+
+function getGoogleCalendar(calendarNameOrId) {
+  const cals = getTargetCalendars(calendarNameOrId);
+  return cals.length > 0 ? cals[0] : null;
+}
+
+function fetchEventsFromCalendars(calendars, startTime, endTime) {
+  const events = [];
+  const seenIds = new Set();
+
+  for (const cal of calendars) {
+    try {
+      const evs = cal.getEvents(startTime, endTime) || [];
+      for (const e of evs) {
+        const id = typeof e.getId === "function" ? e.getId() : `${e.getTitle()}_${e.getStartTime().getTime()}`;
+        if (!seenIds.has(id)) {
+          seenIds.add(id);
+          events.push(e);
+        }
+      }
+    } catch (err) {
+      safeLog(`[ERROR] Failed to fetch events from calendar: ${err.message}`);
+    }
+  }
+
+  return events;
 }
 
 function getCalendarEventDate(event) {
@@ -508,9 +547,9 @@ function eventMatchesCriteria(event, config) {
 }
 
 function getNextEventTriggeredOccurrence(config, today) {
-  const cal = getGoogleCalendar(config.calendar);
-  if (!cal) {
-    safeLog(`[WARN] Calendar "${config.calendar || "@default"}" not found.`);
+  const calendars = getTargetCalendars(config.calendar);
+  if (calendars.length === 0) {
+    safeLog(`[WARN] Calendar "${config.calendar || "@all"}" not found.`);
     return null;
   }
 
@@ -522,13 +561,7 @@ function getNextEventTriggeredOccurrence(config, today) {
   const endTime = new Date(today);
   endTime.setUTCDate(endTime.getUTCDate() + longshot + 1);
 
-  let events = [];
-  try {
-    events = cal.getEvents(startTime, endTime) || [];
-  } catch (err) {
-    safeLog(`[ERROR] Failed to fetch events from calendar: ${err.message}`);
-    return null;
-  }
+  const events = fetchEventsFromCalendars(calendars, startTime, endTime);
 
   const matchingEvents = [];
   for (const e of events) {
@@ -551,9 +584,9 @@ function getNextEventTriggeredOccurrence(config, today) {
 }
 
 function getEventTriggeredAppearDate(config, dueDate) {
-  const cal = getGoogleCalendar(config.calendar);
-  if (!cal) {
-    safeLog(`[WARN] Calendar "${config.calendar || "@default"}" not found.`);
+  const calendars = getTargetCalendars(config.calendar);
+  if (calendars.length === 0) {
+    safeLog(`[WARN] Calendar "${config.calendar || "@all"}" not found.`);
     return new Date(dueDate);
   }
 
@@ -563,13 +596,7 @@ function getEventTriggeredAppearDate(config, dueDate) {
   const endTime = new Date(dueDate);
   endTime.setUTCDate(endTime.getUTCDate() + longshot + 1);
 
-  let events = [];
-  try {
-    events = cal.getEvents(startTime, endTime) || [];
-  } catch (err) {
-    safeLog(`[ERROR] Failed to fetch events from calendar: ${err.message}`);
-    return new Date(dueDate);
-  }
+  const events = fetchEventsFromCalendars(calendars, startTime, endTime);
 
   const matchingEvents = [];
   for (const e of events) {
@@ -977,6 +1004,7 @@ if (typeof module !== "undefined" && module.exports) {
     getNextEventTriggeredOccurrence,
     getEventTriggeredAppearDate,
     getGoogleCalendar,
+    getTargetCalendars,
     getOrCreateTaskList,
     getTaskTagSet,
     taskAlreadyExists,
