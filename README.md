@@ -218,7 +218,7 @@ Here is an example setup demonstrating how different recurrence types and advanc
 
 For developers preferring the terminal workflow via [`@google/clasp`](https://github.com/google/clasp):
 ```bash
-git clone https://github.com/thomasdaviaud/Advanced-Google-Tasks-Scheduler.git
+git clone https://github.com/Thomas-dvd/Advanced-Google-Tasks-Scheduler.git
 cd Advanced-Google-Tasks-Scheduler
 clasp login
 clasp create --title "Advanced Google Tasks Scheduler" --type standalone
