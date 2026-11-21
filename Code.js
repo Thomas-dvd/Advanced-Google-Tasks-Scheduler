@@ -486,16 +486,16 @@ function eventMatchesCriteria(event, config) {
 
   if (config.title) {
     const normEventTitle = String(title).toLowerCase();
-    const normTargetTitle = String(config.title).toLowerCase();
-    if (!normEventTitle.includes(normTargetTitle)) {
+    const keywords = String(config.title).toLowerCase().trim().split(/\s+/).filter(Boolean);
+    if (!keywords.every(kw => normEventTitle.includes(kw))) {
       return false;
     }
   }
 
   if (config.desc) {
     const normEventDesc = String(desc).toLowerCase();
-    const normTargetDesc = String(config.desc).toLowerCase();
-    if (!normEventDesc.includes(normTargetDesc)) {
+    const keywords = String(config.desc).toLowerCase().trim().split(/\s+/).filter(Boolean);
+    if (!keywords.every(kw => normEventDesc.includes(kw))) {
       return false;
     }
   }

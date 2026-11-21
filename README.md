@@ -142,8 +142,8 @@ These 4 columns define the task's identity, content, status, and destination lis
 ### 5. `event_triggered`
 * **Description**: Dynamically anchors the task due date to a specific Google Calendar event.
 * **Parameter format**: Semicolon-separated key-value search criteria:
-  * `TITLE="..."`: Case-insensitive substring in event title.
-  * `DESC="..."`: Case-insensitive substring in event description.
+  * `TITLE="..."`: Case-insensitive keywords in event title (all space-separated keywords must be present, in any order).
+  * `DESC="..."`: Case-insensitive keywords in event description (all space-separated keywords must be present, in any order).
   * `CALENDAR="..."`: Specific calendar name or ID (defaults to primary calendar).
   * `OFFSET=...`: Integer day shift (e.g. `0` = event day, `1` = day after, `-1` = day before). Default `0`.
   * `LONGSHOT=...`: Search window in days ahead from today. Default `60` days.
