@@ -193,7 +193,8 @@ Here is an example setup demonstrating how different recurrence types and advanc
 | `TRUE` | Morning stretch routine | 10 minutes of yoga | Health | `daily` | `1` | | |
 | `TRUE` | Put out recycling bins | Yellow and green bins | Home | `weekly` | `tuesday` | `number_of_day` | `1` |
 | `TRUE` | Team sprint planning | Prepare slide deck & agenda | Work | `weekly` | `friday` | `precise_day` | `monday` |
-| `TRUE` | Review Chinese vocabulary | Practice flashcards | Study | `weekly` | `friday` | `event_triggered` | `TITLE="Chinese class";OFFSET=1` |
+| `TRUE` | Review Chinese vocabulary | Practice flashcards after class | Study | `weekly` | `friday` | `event_triggered` | `TITLE="Chinese class";OFFSET=1` |
+| `TRUE` | Chinese class homework | Complete workbook exercises | Study | `event_triggered` | `TITLE="Chinese class"` | `event_triggered` | `TITLE="Chinese class";SELF=False;OFFSET=1` |
 | `TRUE` | Pay apartment rent | Transfer to landlord via SEPA | Finance | `monthly` | `1` | `number_of_day` | `5` |
 | `TRUE` | Monthly board sync | Review department KPIs | Work | `monthly` | `2-monday` | `precise_day` | `1-tuesday` |
 | `TRUE` | Mid-month budget audit | Export bank statements | Finance | `monthly` | `15` | `precise_day` | `1` |
