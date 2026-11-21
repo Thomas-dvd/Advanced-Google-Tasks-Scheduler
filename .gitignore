@@ -1,6 +1,0 @@
-.clasp.json
-.clasprc.json
-*.log
-AGENTS.md
-.gitignore
-test_recurrence.js
