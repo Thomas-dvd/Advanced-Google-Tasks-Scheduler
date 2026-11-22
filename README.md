@@ -144,7 +144,7 @@ These 4 columns define the task's identity, content, status, and destination lis
 * **Parameter format**: Semicolon-separated key-value search criteria:
   * `TITLE="..."`: Case-insensitive keywords in event title (all space-separated keywords must be present, in any order).
   * `DESC="..."`: Case-insensitive keywords in event description (all space-separated keywords must be present, in any order).
-  * `CALENDAR="..."`: Specific calendar name or ID (defaults to primary calendar).
+  * `CALENDAR="..."`: Specific calendar name, ID, or `"primary"` (defaults to searching across **all calendars**).
   * `OFFSET=...`: Integer day shift (e.g. `0` = event day, `1` = day after, `-1` = day before). Default `0`.
   * `LONGSHOT=...`: Search window in days ahead from today. Default `60` days.
 * **Single Occurrence Guarantee**: Scans forward starting from today and stops at the **first matching event**. A single row will never spawn multiple concurrent tasks in Google Tasks.
