@@ -44,10 +44,10 @@ Row 1 of the **`Tasks`** sheet must contain the following 8 header columns:
 | `title` | String | Yes | Title of the task created in Google Tasks. | `Water household plants` |
 | `description` | String | No | Task notes or body description. Deduplication ID tag will be appended at the end. | `Check moisture level first` |
 | `tasklist_name` | String | No | Target task list name. If blank or `@default`, your primary default list is used. | `Home` |
-| `type` | String | Yes | Recurrence type: `daily`, `weekly`, `monthly`, or `yearly`. | `weekly` |
-| `parameter_1` | String | Yes | Recurrence parameter matching the chosen `type` (e.g. `2-monday`, `15`, `monday; thursday`). | `monday; thursday` |
-| `advance` | String | No | Advance mode: `number_of_day` or `precise_day`. If empty, appears on due date. | `precise_day` |
-| `parameter_2` | String | No | Configuration for `advance` (number of days or precise day target). | `1` |
+| `type` | String | Yes | Recurrence type: `daily`, `weekly`, `monthly`, `yearly`, or `event_triggered`. | `weekly` |
+| `parameter_1` | String | Yes | Recurrence parameter matching the chosen `type` (e.g. `2-monday`, `15`, `TITLE="cours de chinois"`). | `monday; thursday` |
+| `advance` | String | No | Advance mode: `number_of_day`, `precise_day`, or `event_triggered`. If empty, appears on due date. | `precise_day` |
+| `parameter_2` | String | No | Configuration for `advance` (days count, precise day, or event filter string). | `1` |
 
 ---
 
@@ -103,6 +103,22 @@ Recursive Tasks supports **4 core recurrence types**. Multiple values within `pa
 
 ---
 
+### 5. `event_triggered`
+* **Description**: Dynamically anchors the task due date to a specific Google Calendar event.
+* **Parameter format**: Semicolon-separated key-value search criteria:
+  * `TITLE="..."`: Case-insensitive substring in event title.
+  * `DESC="..."`: Case-insensitive substring in event description.
+  * `CALENDAR="..."`: Specific calendar name or ID (defaults to primary calendar).
+  * `OFFSET=...`: Integer day shift (e.g. `0` = event day, `1` = day after, `-1` = day before). Default `0`.
+  * `LONGSHOT=...`: Search window in days ahead from today. Default `60` days.
+* **Single Occurrence Guarantee**: Scans forward starting from today and stops at the **first matching event**. A single row will never spawn multiple concurrent tasks in Google Tasks.
+* **Examples**:
+  * `TITLE="cours de chinois";OFFSET=1` &rarr; Due the day after your next Chinese lesson.
+  * `TITLE="Examen";OFFSET=-1;LONGSHOT=90` &rarr; Due the day before your next exam within 90 days.
+  * `TITLE="Conseil syndical";CALENDAR="Perso"` &rarr; Due on the day of the meeting found in the "Perso" calendar.
+
+---
+
 ## ⏳ Advance Appearance Rules (`advance` & `parameter_2`)
 
 You can control exactly when a recurring task appears in Google Tasks before its due date:
@@ -121,6 +137,13 @@ Controls the exact calendar anchor for the task to appear:
   * A day of the year (e.g. `90` &rarr; appears on day 90).
   * A month-day pair (e.g. `december-1` &rarr; appears on December 1st).
 
+### 3. `advance = "event_triggered"`
+* **Description**: Makes a task appear relative to a Google Calendar event.
+* **`parameter_2`**: Event filter string (same syntax as above: `TITLE="..."`, `DESC="..."`, `CALENDAR="..."`, `OFFSET=...`, `LONGSHOT=...`).
+* **Closest Event Matching**: Looks for the matching event **closest** to the task's due date and applies `OFFSET`.
+* **Example**:
+  * `TITLE="cours de chinois";OFFSET=1` &rarr; The task appears the day following your Chinese class (e.g. to review lesson material before the next deadline).
+
 ---
 
 ## 💡 Spreadsheet Examples
@@ -132,10 +155,11 @@ Here is an example setup demonstrating how different recurrence types and advanc
 | `TRUE` | Morning stretch routine | 10 minutes of yoga | Health | `daily` | `1` | | |
 | `TRUE` | Put out recycling bins | Yellow and green bins | Home | `weekly` | `tuesday` | `number_of_day` | `1` |
 | `TRUE` | Team sprint planning | Prepare slide deck & agenda | Work | `weekly` | `friday` | `precise_day` | `monday` |
+| `TRUE` | Review Chinese vocabulary | Practice flashcards | Study | `weekly` | `friday` | `event_triggered` | `TITLE="cours de chinois";OFFSET=1` |
 | `TRUE` | Pay apartment rent | Transfer to landlord via SEPA | Finance | `monthly` | `1` | `number_of_day` | `5` |
 | `TRUE` | Monthly board sync | Review department KPIs | Work | `monthly` | `2-monday` | `precise_day` | `1-tuesday` |
 | `TRUE` | Mid-month budget audit | Export bank statements | Finance | `monthly` | `15` | `precise_day` | `1` |
-| `TRUE` | Mid-year goal review | Revisit annual OKRs | Personal | `yearly` | `182` | `precise_day` | `175` |
+| `TRUE` | Prepare final exam pack | Print summary sheets | Study | `event_triggered` | `TITLE="Examen";OFFSET=-1` | `number_of_day` | `7` |
 | `TRUE` | File tax return | Gather receipts and forms | Admin | `yearly` | `may-15` | `number_of_day` | `14` |
 | `TRUE` | Wish happy birthday | Send card and gift | Friends | `yearly` | `july-14; august-1`| `number_of_day` | `3` |
 

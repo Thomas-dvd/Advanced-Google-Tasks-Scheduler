@@ -13,6 +13,41 @@ if (typeof global.Logger === "undefined") {
   global.Logger = { log: () => {} };
 }
 
+let mockCalendarEvents = [];
+global.CalendarApp = {
+  getDefaultCalendar: () => ({
+    getEvents: (startTime, endTime) => {
+      return mockCalendarEvents.filter((e) => {
+        const d = e.getStartTime();
+        return d >= startTime && d <= endTime;
+      });
+    },
+  }),
+  getCalendarsByName: (name) => {
+    return [
+      {
+        getName: () => name,
+        getEvents: (startTime, endTime) => {
+          return mockCalendarEvents.filter((e) => {
+            const d = e.getStartTime();
+            return e.calendarName === name && d >= startTime && d <= endTime;
+          });
+        },
+      },
+    ];
+  },
+  getCalendarById: (id) => null,
+};
+
+function createMockEvent(title, startTime, desc = "", calendarName = "@default") {
+  return {
+    getTitle: () => title,
+    getDescription: () => desc,
+    getStartTime: () => startTime,
+    calendarName,
+  };
+}
+
 const {
   getNextOccurrences,
   getNextOccurrence,
@@ -29,6 +64,10 @@ const {
   isLeapYear,
   formatDate,
   getAppearDate,
+  parseEventTriggerConfig,
+  eventMatchesCriteria,
+  getNextEventTriggeredOccurrence,
+  getEventTriggeredAppearDate,
 } = require("./Code.js");
 
 // --- Minimalist Test Framework ---
@@ -750,6 +789,143 @@ describe("7. Advance Rules & Unified Yearly Recurrence", () => {
     };
     const dueDay100 = utcDate(2026, 4, 10);
     assertEqualDates(getAppearDate(ruleYearlyNum, dueDay100), utcDate(2026, 3, 31));
+  });
+});
+
+// ==============================================================================
+// 8. EVENT_TRIGGERED RECURRENCE & ADVANCE TESTS
+// ==============================================================================
+describe("8. Event-Triggered Recurrence & Advance Algorithm", () => {
+  test("parseEventTriggerConfig parses key-value pairs with quotes and defaults", () => {
+    const cfg1 = parseEventTriggerConfig('TITLE="cours de chinois";OFFSET=1');
+    assertEqual(cfg1.title, "cours de chinois");
+    assertEqual(cfg1.offset, 1);
+    assertEqual(cfg1.longshot, 60);
+    assertEqual(cfg1.desc, null);
+    assertEqual(cfg1.calendar, null);
+
+    const cfg2 = parseEventTriggerConfig('TITLE=cours de chinois;DESC="salle 102";CALENDAR="Perso";OFFSET=-1;LONGSHOT=30');
+    assertEqual(cfg2.title, "cours de chinois");
+    assertEqual(cfg2.desc, "salle 102");
+    assertEqual(cfg2.calendar, "Perso");
+    assertEqual(cfg2.offset, -1);
+    assertEqual(cfg2.longshot, 30);
+
+    const cfgEmpty = parseEventTriggerConfig("");
+    assertEqual(cfgEmpty, null);
+  });
+
+  test("type = 'event_triggered' finds first upcoming matching event starting from today", () => {
+    const today = utcDate(2026, 11, 21);
+    mockCalendarEvents = [
+      createMockEvent("Dentiste", utcDate(2026, 11, 23)),
+      createMockEvent("Cours de chinois", utcDate(2026, 11, 25)),
+      createMockEvent("Cours de chinois", utcDate(2026, 11, 28)),
+    ];
+
+    // Case 1: OFFSET = 0 -> due date is Nov 25
+    const rule1 = {
+      type: "event_triggered",
+      parameter_1: 'TITLE="cours de chinois"',
+    };
+    const occs1 = getNextOccurrences(rule1, today);
+    assertEqual(occs1.length, 1);
+    assertEqualDates(occs1[0], utcDate(2026, 11, 25));
+
+    // Case 2: OFFSET = 1 -> due date is Nov 26 (day after event)
+    const rule2 = {
+      type: "event_triggered",
+      parameter_1: 'TITLE="cours de chinois";OFFSET=1',
+    };
+    const occs2 = getNextOccurrences(rule2, today);
+    assertEqual(occs2.length, 1);
+    assertEqualDates(occs2[0], utcDate(2026, 11, 26));
+
+    // Case 3: OFFSET = -1 -> due date is Nov 24 (day before event)
+    const rule3 = {
+      type: "event_triggered",
+      parameter_1: 'TITLE="cours de chinois";OFFSET=-1',
+    };
+    const occs3 = getNextOccurrences(rule3, today);
+    assertEqual(occs3.length, 1);
+    assertEqualDates(occs3[0], utcDate(2026, 11, 24));
+  });
+
+  test("type = 'event_triggered' respects LONGSHOT window limit", () => {
+    const today = utcDate(2026, 1, 1);
+    // Event is 75 days later (March 17)
+    mockCalendarEvents = [
+      createMockEvent("Grand Marathon", utcDate(2026, 3, 17)),
+    ];
+
+    // Default longshot is 60 days -> event at day 75 is NOT found
+    const ruleDefault = {
+      type: "event_triggered",
+      parameter_1: 'TITLE="Marathon"',
+    };
+    const occsDefault = getNextOccurrences(ruleDefault, today);
+    assertEqual(occsDefault.length, 0);
+
+    // Explicit LONGSHOT=90 -> event IS found
+    const ruleExtended = {
+      type: "event_triggered",
+      parameter_1: 'TITLE="Marathon";LONGSHOT=90',
+    };
+    const occsExtended = getNextOccurrences(ruleExtended, today);
+    assertEqual(occsExtended.length, 1);
+    assertEqualDates(occsExtended[0], utcDate(2026, 3, 17));
+  });
+
+  test("type = 'event_triggered' filters by CALENDAR and DESC", () => {
+    const today = utcDate(2026, 11, 1);
+    mockCalendarEvents = [
+      createMockEvent("Réunion", utcDate(2026, 11, 5), "Session interne", "Travail"),
+      createMockEvent("Réunion", utcDate(2026, 11, 10), "Conseil syndical", "Perso"),
+    ];
+
+    const rulePerso = {
+      type: "event_triggered",
+      parameter_1: 'TITLE="Réunion";CALENDAR="Perso"',
+    };
+    const occs = getNextOccurrences(rulePerso, today);
+    assertEqual(occs.length, 1);
+    assertEqualDates(occs[0], utcDate(2026, 11, 10));
+  });
+
+  test("advance = 'event_triggered' finds closest matching event to dueDate and applies offset", () => {
+    // Task due on Friday Nov 27
+    const dueFriday = utcDate(2026, 11, 27);
+    mockCalendarEvents = [
+      createMockEvent("Cours de chinois", utcDate(2026, 11, 10)),
+      createMockEvent("Cours de chinois", utcDate(2026, 11, 24)), // Tuesday (closest to Friday Nov 27, dist = 3 days)
+      createMockEvent("Cours de chinois", utcDate(2026, 12, 8)),
+    ];
+
+    // "TITLE='cours de chinois';OFFSET=1" -> task appears day after closest event (Nov 24 + 1 = Nov 25)
+    const rule = {
+      type: "weekly",
+      parameter_1: "friday",
+      advance: "event_triggered",
+      parameter_2: 'TITLE="cours de chinois";OFFSET=1',
+    };
+
+    const appearDate = getAppearDate(rule, dueFriday);
+    assertEqualDates(appearDate, utcDate(2026, 11, 25));
+  });
+
+  test("advance = 'event_triggered' falls back to dueDate if no matching event", () => {
+    const dueDate = utcDate(2026, 11, 27);
+    mockCalendarEvents = []; // No events
+
+    const rule = {
+      type: "weekly",
+      parameter_1: "friday",
+      advance: "event_triggered",
+      parameter_2: 'TITLE="Événement introuvable"',
+    };
+
+    const appearDate = getAppearDate(rule, dueDate);
+    assertEqualDates(appearDate, dueDate);
   });
 });
 

@@ -112,6 +112,16 @@ function getNextOccurrences(rule, today) {
           : (rule.dueDay !== undefined && rule.dueDay !== null ? rule.dueDay : (rule.parameter || "")))
   ).trim();
 
+  if (type === "event_triggered" || type === "event" || type === "evenement") {
+    const config = parseEventTriggerConfig(rawParam);
+    if (!config) {
+      safeLog(`[WARN] "${rule.title}": Invalid event_triggered parameter "${rawParam}".`);
+      return [];
+    }
+    const occ = getNextEventTriggeredOccurrence(config, today);
+    return occ ? [occ] : [];
+  }
+
   let targets = rawParam.split(";").map((s) => s.trim()).filter((s) => s.length > 0);
 
   if (type === "daily" || type === "day" || type === "quotidien") {
@@ -441,6 +451,189 @@ function parseMonthDay(str) {
   return null;
 }
 
+function parseEventTriggerConfig(paramStr) {
+  if (!paramStr) return null;
+  const config = {
+    title: null,
+    desc: null,
+    calendar: null,
+    offset: 0,
+    longshot: 60,
+  };
+
+  const regex = /(?:^|;)\s*([A-Za-z0-9_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^;]*))/g;
+  let match;
+  let foundAny = false;
+
+  while ((match = regex.exec(paramStr)) !== null) {
+    const key = match[1].toUpperCase().trim();
+    const val = (match[2] !== undefined ? match[2] : (match[3] !== undefined ? match[3] : (match[4] || ""))).trim();
+    foundAny = true;
+
+    if (key === "TITLE" || key === "TITRE") {
+      config.title = val;
+    } else if (key === "DESC" || key === "DESCRIPTION") {
+      config.desc = val;
+    } else if (key === "CALENDAR" || key === "CALENDRIER" || key === "CAL") {
+      config.calendar = val;
+    } else if (key === "OFFSET" || key === "DECALAGE") {
+      const n = parseInt(val, 10);
+      config.offset = isNaN(n) ? 0 : n;
+    } else if (key === "LONGSHOT" || key === "HORIZON" || key === "WINDOW") {
+      const n = parseInt(val, 10);
+      config.longshot = isNaN(n) || n <= 0 ? 60 : n;
+    }
+  }
+
+  return foundAny ? config : null;
+}
+
+function getGoogleCalendar(calendarNameOrId) {
+  if (typeof CalendarApp === "undefined") {
+    return null;
+  }
+  if (!calendarNameOrId || calendarNameOrId === "@default" || calendarNameOrId === "primary") {
+    return CalendarApp.getDefaultCalendar();
+  }
+  const byName = CalendarApp.getCalendarsByName(calendarNameOrId);
+  if (byName && byName.length > 0) {
+    return byName[0];
+  }
+  try {
+    return CalendarApp.getCalendarById(calendarNameOrId);
+  } catch (e) {
+    return null;
+  }
+}
+
+function getCalendarEventDate(event) {
+  let d;
+  if (typeof event.getStartTime === "function") {
+    d = event.getStartTime();
+  } else if (event.startTime) {
+    d = new Date(event.startTime);
+  } else {
+    d = new Date();
+  }
+  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+}
+
+function eventMatchesCriteria(event, config) {
+  if (!event || !config) return false;
+
+  const title = typeof event.getTitle === "function" ? event.getTitle() : (event.title || "");
+  const desc = typeof event.getDescription === "function" ? event.getDescription() : (event.description || event.desc || "");
+
+  if (config.title) {
+    const normEventTitle = String(title).toLowerCase();
+    const normTargetTitle = String(config.title).toLowerCase();
+    if (!normEventTitle.includes(normTargetTitle)) {
+      return false;
+    }
+  }
+
+  if (config.desc) {
+    const normEventDesc = String(desc).toLowerCase();
+    const normTargetDesc = String(config.desc).toLowerCase();
+    if (!normEventDesc.includes(normTargetDesc)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function getNextEventTriggeredOccurrence(config, today) {
+  const cal = getGoogleCalendar(config.calendar);
+  if (!cal) {
+    safeLog(`[WARN] Calendar "${config.calendar || "@default"}" not found.`);
+    return null;
+  }
+
+  const longshot = config.longshot || 60;
+  const startTime = new Date(today);
+  const endTime = new Date(today);
+  endTime.setUTCDate(endTime.getUTCDate() + longshot + 1);
+
+  let events = [];
+  try {
+    events = cal.getEvents(startTime, endTime) || [];
+  } catch (err) {
+    safeLog(`[ERROR] Failed to fetch events from calendar: ${err.message}`);
+    return null;
+  }
+
+  const matchingEvents = [];
+  for (const e of events) {
+    if (eventMatchesCriteria(e, config)) {
+      const eDate = getCalendarEventDate(e);
+      if (eDate >= today) {
+        matchingEvents.push({ event: e, date: eDate });
+      }
+    }
+  }
+
+  if (matchingEvents.length === 0) {
+    return null;
+  }
+
+  matchingEvents.sort((a, b) => a.date.getTime() - b.date.getTime());
+  const firstEvent = matchingEvents[0];
+
+  const dueDate = new Date(firstEvent.date);
+  dueDate.setUTCDate(dueDate.getUTCDate() + (config.offset || 0));
+  return dueDate;
+}
+
+function getEventTriggeredAppearDate(config, dueDate) {
+  const cal = getGoogleCalendar(config.calendar);
+  if (!cal) {
+    safeLog(`[WARN] Calendar "${config.calendar || "@default"}" not found.`);
+    return new Date(dueDate);
+  }
+
+  const longshot = config.longshot || 60;
+  const startTime = new Date(dueDate);
+  startTime.setUTCDate(startTime.getUTCDate() - longshot);
+  const endTime = new Date(dueDate);
+  endTime.setUTCDate(endTime.getUTCDate() + longshot + 1);
+
+  let events = [];
+  try {
+    events = cal.getEvents(startTime, endTime) || [];
+  } catch (err) {
+    safeLog(`[ERROR] Failed to fetch events from calendar: ${err.message}`);
+    return new Date(dueDate);
+  }
+
+  const matchingEvents = [];
+  for (const e of events) {
+    if (eventMatchesCriteria(e, config)) {
+      const eDate = getCalendarEventDate(e);
+      matchingEvents.push({
+        event: e,
+        date: eDate,
+        dist: Math.abs(eDate.getTime() - dueDate.getTime()),
+      });
+    }
+  }
+
+  if (matchingEvents.length === 0) {
+    return new Date(dueDate);
+  }
+
+  // Sort by distance to dueDate ascending. If tied, prefer date <= dueDate
+  matchingEvents.sort((a, b) => {
+    if (a.dist !== b.dist) return a.dist - b.dist;
+    return a.date.getTime() - b.date.getTime();
+  });
+
+  const closest = matchingEvents[0];
+  const appearDate = new Date(closest.date);
+  appearDate.setUTCDate(appearDate.getUTCDate() + (config.offset || 0));
+  return appearDate;
+}
+
 function deduplicateAndSortDates(dates) {
   const map = new Map();
   for (const d of dates) {
@@ -555,6 +748,14 @@ function getAppearDate(rule, dueDate) {
         }
         return getDateFromDayOfYear(curYear - 1, dayOfYear);
       }
+    }
+  }
+
+  // 3. event_triggered: appear relative to a Google Calendar event
+  if (advType === "event_triggered" || advType === "event" || advType === "evenement") {
+    const config = parseEventTriggerConfig(param2);
+    if (config) {
+      return getEventTriggeredAppearDate(config, dueDate);
     }
   }
 
@@ -772,5 +973,11 @@ if (typeof module !== "undefined" && module.exports) {
     formatDate,
     getAppearDate,
     generateTaskId,
+    parseEventTriggerConfig,
+    eventMatchesCriteria,
+    getCalendarEventDate,
+    getNextEventTriggeredOccurrence,
+    getEventTriggeredAppearDate,
+    getGoogleCalendar,
   };
 }
