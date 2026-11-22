@@ -59,7 +59,7 @@ function processRule(rule, today, context = {}) {
 
   for (const dueDate of occurrences) {
     // Check if task should appear yet
-    const appearDate = getAppearDate(rule, dueDate, today);
+    const appearDate = getAppearDate(rule, dueDate);
     if (today < appearDate) {
       safeLog(`[SKIP] "${rule.title}": scheduled to appear on ${formatDate(appearDate)} (due ${formatDate(dueDate)})`);
       continue;
@@ -583,7 +583,7 @@ function getNextEventTriggeredOccurrence(config, today) {
   return matchingEvents[0].dueDate;
 }
 
-function getEventTriggeredAppearDate(config, dueDate, today = new Date()) {
+function getEventTriggeredAppearDate(config, dueDate) {
   const calendars = getTargetCalendars(config.calendar);
   if (calendars.length === 0) {
     safeLog(`[WARN] Calendar "${config.calendar || "@all"}" not found.`);
@@ -623,35 +623,36 @@ function getEventTriggeredAppearDate(config, dueDate, today = new Date()) {
   let selected = matchingEvents[0];
 
   if (config.self === false) {
+    const targetTitle = String(selected.event.getTitle() || "").toLowerCase().trim();
     const targetTime = typeof selected.event.getStartTime === "function"
       ? selected.event.getStartTime().getTime()
       : selected.date.getTime();
 
-    // All events in matchingEvents match the user's criteria.
-    // Find preceding sessions occurring strictly before the target session.
-    const previousEvents = matchingEvents.filter(m => {
+    // Find all matching events occurring before the target event
+    const earlierEvents = matchingEvents.filter(m => {
       const mTime = typeof m.event.getStartTime === "function"
         ? m.event.getStartTime().getTime()
         : m.date.getTime();
       return mTime < targetTime;
     });
 
-    if (previousEvents.length > 0) {
-      previousEvents.sort((a, b) => {
+    if (earlierEvents.length > 0) {
+      // Sort descending by start time to pick the immediately preceding one
+      earlierEvents.sort((a, b) => {
         const timeA = typeof a.event.getStartTime === "function" ? a.event.getStartTime().getTime() : a.date.getTime();
         const timeB = typeof b.event.getStartTime === "function" ? b.event.getStartTime().getTime() : b.date.getTime();
         return timeB - timeA;
       });
-      selected = previousEvents[0];
-      const appearDate = new Date(selected.date);
-      appearDate.setUTCDate(appearDate.getUTCDate() + (config.offset || 0));
-      return appearDate > dueDate ? new Date(dueDate) : appearDate;
+
+      // Prefer exact title match if available, otherwise take the most recent earlier matching event
+      const exactMatch = earlierEvents.find(m => String(m.event.getTitle() || "").toLowerCase().trim() === targetTitle);
+      selected = exactMatch || earlierEvents[0];
     } else {
-      // No previous session found in calendar (e.g. first session of semester).
-      // Appear immediately (today) so the user has time to prepare before dueDate.
-      const now = today ? new Date(today) : new Date();
-      const nowUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-      return nowUtc < dueDate ? nowUtc : new Date(dueDate);
+      // If no earlier event exists, clamp appear date so it never appears after dueDate
+      const fallbackOffset = (config.offset || 0) > 0 ? 0 : (config.offset || 0);
+      const appearDate = new Date(selected.date);
+      appearDate.setUTCDate(appearDate.getUTCDate() + fallbackOffset);
+      return appearDate;
     }
   }
 
@@ -673,7 +674,7 @@ function deduplicateAndSortDates(dates) {
 }
 
 // Calculate appear date based on advance rules (number_of_day, precise_day, event_triggered)
-function getAppearDate(rule, dueDate, today = new Date()) {
+function getAppearDate(rule, dueDate) {
   const advType = String(rule.advance || "").toLowerCase().trim();
   const param2 = String(rule.parameter_2 != null ? rule.parameter_2 : "").trim();
 
@@ -761,7 +762,7 @@ function getAppearDate(rule, dueDate, today = new Date()) {
   if (advType === "event_triggered") {
     const config = parseEventTriggerConfig(param2);
     if (config) {
-      return getEventTriggeredAppearDate(config, dueDate, today);
+      return getEventTriggeredAppearDate(config, dueDate);
     }
   }
 
