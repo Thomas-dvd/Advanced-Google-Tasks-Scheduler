@@ -623,7 +623,6 @@ function getEventTriggeredAppearDate(config, dueDate) {
   let selected = matchingEvents[0];
 
   if (config.self === false) {
-    const targetTitle = String(selected.event.getTitle() || "").toLowerCase().trim();
     const targetTime = typeof selected.event.getStartTime === "function"
       ? selected.event.getStartTime().getTime()
       : selected.date.getTime();
@@ -643,10 +642,7 @@ function getEventTriggeredAppearDate(config, dueDate) {
         const timeB = typeof b.event.getStartTime === "function" ? b.event.getStartTime().getTime() : b.date.getTime();
         return timeB - timeA;
       });
-
-      // Prefer exact title match if available, otherwise take the most recent earlier matching event
-      const exactMatch = earlierEvents.find(m => String(m.event.getTitle() || "").toLowerCase().trim() === targetTitle);
-      selected = exactMatch || earlierEvents[0];
+      selected = earlierEvents[0];
     } else {
       // If no earlier event exists, clamp appear date so it never appears after dueDate
       const fallbackOffset = (config.offset || 0) > 0 ? 0 : (config.offset || 0);
