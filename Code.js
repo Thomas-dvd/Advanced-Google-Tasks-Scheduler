@@ -59,7 +59,7 @@ function processRule(rule, today, context = {}) {
 
   for (const dueDate of occurrences) {
     // Check if task should appear yet
-    const appearDate = getAppearDate(rule, dueDate);
+    const appearDate = getAppearDate(rule, dueDate, today);
     if (today < appearDate) {
       safeLog(`[SKIP] "${rule.title}": scheduled to appear on ${formatDate(appearDate)} (due ${formatDate(dueDate)})`);
       continue;
@@ -583,7 +583,7 @@ function getNextEventTriggeredOccurrence(config, today) {
   return matchingEvents[0].dueDate;
 }
 
-function getEventTriggeredAppearDate(config, dueDate) {
+function getEventTriggeredAppearDate(config, dueDate, today = new Date()) {
   const calendars = getTargetCalendars(config.calendar);
   if (calendars.length === 0) {
     safeLog(`[WARN] Calendar "${config.calendar || "@all"}" not found.`);
@@ -623,17 +623,17 @@ function getEventTriggeredAppearDate(config, dueDate) {
   let selected = matchingEvents[0];
 
   if (config.self === false) {
-    const targetTitle = String(selected.event.getTitle() || "").toLowerCase().trim();
     const targetTime = typeof selected.event.getStartTime === "function"
       ? selected.event.getStartTime().getTime()
       : selected.date.getTime();
 
+    // All events in matchingEvents match the user's criteria.
+    // Find preceding sessions occurring strictly before the target session.
     const previousEvents = matchingEvents.filter(m => {
-      const mTitle = String(m.event.getTitle() || "").toLowerCase().trim();
       const mTime = typeof m.event.getStartTime === "function"
         ? m.event.getStartTime().getTime()
         : m.date.getTime();
-      return mTitle === targetTitle && mTime < targetTime;
+      return mTime < targetTime;
     });
 
     if (previousEvents.length > 0) {
@@ -643,6 +643,15 @@ function getEventTriggeredAppearDate(config, dueDate) {
         return timeB - timeA;
       });
       selected = previousEvents[0];
+      const appearDate = new Date(selected.date);
+      appearDate.setUTCDate(appearDate.getUTCDate() + (config.offset || 0));
+      return appearDate > dueDate ? new Date(dueDate) : appearDate;
+    } else {
+      // No previous session found in calendar (e.g. first session of semester).
+      // Appear immediately (today) so the user has time to prepare before dueDate.
+      const now = today ? new Date(today) : new Date();
+      const nowUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      return nowUtc < dueDate ? nowUtc : new Date(dueDate);
     }
   }
 
@@ -664,7 +673,7 @@ function deduplicateAndSortDates(dates) {
 }
 
 // Calculate appear date based on advance rules (number_of_day, precise_day, event_triggered)
-function getAppearDate(rule, dueDate) {
+function getAppearDate(rule, dueDate, today = new Date()) {
   const advType = String(rule.advance || "").toLowerCase().trim();
   const param2 = String(rule.parameter_2 != null ? rule.parameter_2 : "").trim();
 
@@ -752,7 +761,7 @@ function getAppearDate(rule, dueDate) {
   if (advType === "event_triggered") {
     const config = parseEventTriggerConfig(param2);
     if (config) {
-      return getEventTriggeredAppearDate(config, dueDate);
+      return getEventTriggeredAppearDate(config, dueDate, today);
     }
   }
 
