@@ -1,3 +1,5 @@
 .clasp.json
 .clasprc.json
 *.log
+AGENTS.md
+.gitignore
